@@ -88,6 +88,7 @@ struct CorpusRecord {
   ByteArray data;
   FeatureVec features;
   ExecutionMetadata metadata;
+  std::vector<size_t> personal_frontier_nodes; // store frontier_node list of seed
 };
 
 // Maintains the corpus of inputs.
@@ -167,6 +168,10 @@ class CoverageFrontier {
       : binary_info_(binary_info),
         frontier_(binary_info.pc_table.size()),
         frontier_weight_(binary_info.pc_table.size()) {}
+
+
+  // Store global frontier nodes
+  std::vector<size_t> global_frontier_;
 
   // Computes the coverage frontier of `corpus`.
   // Returns the number of functions in the frontier.

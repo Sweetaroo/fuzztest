@@ -21,6 +21,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <unordered_set>
+#include <random>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -122,6 +124,18 @@ void Corpus::Add(const ByteArray &data, const FeatureVec &fv,
   CHECK(!data.empty())
       << "Got request to add empty element to corpus: ignoring";
   CHECK_EQ(records_.size(), weighted_distribution_.size());
+
+  // Compute personal frontier nodes
+  std::vector<size_t> personal_frontier_nodes;
+  for (const auto feature : fv) {
+    if (!feature_domains::kPCs.Contains(feature)) continue;
+    const auto pc_index = ConvertPCFeatureToPcIndex(feature);
+    if (pc_index >= coverage_frontier.MaxPcIndex()) continue;
+    if (coverage_frontier.PcIndexIsFrontier(pc_index)) {
+      personal_frontier_nodes.push_back(pc_index);
+    }
+  }
+
   records_.push_back({data, fv, metadata});
   weighted_distribution_.AddWeight(ComputeWeight(fv, fs, coverage_frontier));
 }
@@ -177,6 +191,67 @@ std::string Corpus::MemoryUsageString() const {
     features_size += record.features.capacity() * sizeof(record.features[0]);
   }
   return absl::StrCat("d", data_size >> 20, "/f", features_size >> 20);
+}
+
+
+//main setcover logic
+// Todo , map the set to the weighted_distribution then use random, set the weight of the seed
+// in representative_seeds to 1, other to 0
+
+std::vector<size_t> Corpus::GetRepresentativeSeeds(const CoverageFrontier &coverage_frontier) {
+  std::vector<size_t> representative_seeds;
+  std::unordered_set<size_t> covered_frontiers;
+  std::vector<size_t> seed_indices(records_.size());
+  std::iota(seed_indices.begin(), seed_indices.end(), 0); // Fill seed_indices with 0, 1, ..., records_.size()-1
+
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  while (covered_frontiers.size() < coverage_frontier.global_frontier_.size()) {
+    std::shuffle(seed_indices.begin(), seed_indices.end(), gen); // Shuffle the seed indices
+
+    for (size_t i : seed_indices) {
+      const auto &seed_frontiers = records_[i].personal_frontier_nodes;
+      bool has_new_coverage = false;
+
+      for (const auto &frontier : seed_frontiers) {
+        if (covered_frontiers.find(frontier) == covered_frontiers.end()) {
+          has_new_coverage = true;
+          break;
+        }
+      }
+
+      if (has_new_coverage) {
+        representative_seeds.push_back(i);
+        for (const auto &frontier : seed_frontiers) {
+          covered_frontiers.insert(frontier);
+        }
+      }
+
+      if (covered_frontiers.size() >= coverage_frontier.global_frontier_.size()) {
+        break;
+      }
+    }
+  }
+
+  return representative_seeds;
+}
+// TODO , inset in main fuzzing loop logic
+std::vector<ByteArray> Corpus::SelectSeedsForNextRound(const CoverageFrontier &coverage_frontier) {
+  std::vector<size_t> representative_seeds = GetRepresentativeSeeds(coverage_frontier);
+  std::vector<ByteArray> selected_seeds;
+
+  for (size_t seed_index : representative_seeds) {
+    selected_seeds.push_back(records_[seed_index].data);
+  }
+
+  // Reset weights for selected seeds
+  weighted_distribution_.Clear();
+  for (size_t seed_index : representative_seeds) {
+    weighted_distribution_.AddWeight(1); // Uniform weight
+  }
+
+  return selected_seeds;
 }
 
 //------------------------------------------------------------------------------
@@ -293,6 +368,8 @@ size_t CoverageFrontier::Compute(
 
         // Now we have a frontier, compute the weight.
         frontier_[i] = true;
+
+        global_frontier_.push_back(i); // Add to global frontier
 
         // Calculate frontier weight.
         // Here we use reachability and coverage to identify all reachable and
