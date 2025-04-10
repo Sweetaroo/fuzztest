@@ -690,6 +690,44 @@ void Centipede::ReloadAllShardsAndWriteDistilledCorpus() {
   }
 }
 
+std::set<size_t> Centipede::GreedySetConstruction() {
+  std::set<size_t> reduced_set;
+  auto frontier_status = coverage_frontier_.GetGlobalFrontierVec();
+  std::vector<bool> seed_status(corpus_.NumActive(), false);
+
+  size_t total_frontier_num = coverage_frontier_.NumFunctionsInFrontier();
+  size_t covered_frontier_num = 0;
+  while (covered_frontier_num < total_frontier_num) {
+    // count coverd frontier nodes in the remaining global frontier node set for each seed
+    size_t selected_seed_index = 0;
+    size_t max_covered_num = 0;
+    for (size_t index = 0; index < corpus_.NumActive(); index ++) {
+      if (seed_status[index]) continue;
+      size_t cur_covered_num = 0;
+      auto &record = corpus_.Records()[index];
+      auto &frontier_node_set = record.frontier_node_set;
+      for (auto &frontier_node_idx : frontier_node_set) {
+        if (frontier_status[frontier_node_idx]) {
+          cur_covered_num ++;
+        }
+      }
+      if (cur_covered_num > max_covered_num) {
+        max_covered_num = cur_covered_num;
+        selected_seed_index = index;
+      }
+    }
+    covered_frontier_num += max_covered_num;
+    reduced_set.insert(selected_seed_index);
+    auto &record = corpus_.Records()[selected_seed_index];
+    auto &frontier_node_set = record.frontier_node_set;
+    for (auto &frontier_node_idx : frontier_node_set) {
+      frontier_status[frontier_node_idx] = false;
+    }
+    seed_status[selected_seed_index] = true;
+  }
+  return reduced_set;
+}
+
 std::set<size_t> Centipede::DynamicSetConstruction() {
   std::set<size_t> reduced_set;
   std::vector<bool> covered_frontier_nodes(coverage_frontier_.MaxPcIndex(), false);
@@ -849,7 +887,7 @@ void Centipede::FuzzingLoop() {
       corpus_.UpdateFrontierNodeSetForCorpus(coverage_frontier_);
 
       // get reduced seed set via Dynamic Set Construction algorithm
-      std::set<size_t> reduced_set = DynamicSetConstruction();
+      std::set<size_t> reduced_set = GreedySetConstruction();
 
       // PrintSeedFrontierNodes();
 

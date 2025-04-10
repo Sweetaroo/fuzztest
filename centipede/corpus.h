@@ -204,6 +204,10 @@ class CoverageFrontier {
 
   void UpdateGlobalFrontierSet(const std::vector<CorpusRecord> &);
 
+  std::vector<bool> GetGlobalFrontierVec() const {
+    return frontier_;
+  }
+
  private:
   const BinaryInfo &binary_info_;
 

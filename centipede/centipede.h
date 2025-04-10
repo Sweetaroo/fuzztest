@@ -170,6 +170,9 @@ class Centipede {
   // reduce corpus set via setcover algorithm
   std::set<size_t> DynamicSetConstruction();
 
+  // greedy reduced set selection algorithm
+  std::set<size_t> GreedySetConstruction();
+
   // first mover selection, return selected corpus records
   std::set<size_t> FirstMoverSelection(const std::set<size_t> &reduced_set, size_t mutate_batch_size);
 
