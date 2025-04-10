@@ -851,16 +851,17 @@ void Centipede::FuzzingLoop() {
       // get reduced seed set via Dynamic Set Construction algorithm
       std::set<size_t> reduced_set = DynamicSetConstruction();
 
+      // used for randomly selecting seeds from reduced corpus
+      std::vector<size_t> reduced_vec(reduced_set.begin(), reduced_set.end());
+      std::shuffle(reduced_vec.begin(), reduced_vec.end(), rng_);
       // PrintSeedFrontierNodes();
 
       printf("corpus size : %d   reduced set : %d\n", corpus_.NumActive(), reduced_set.size());
       // select seeds from reduced corpus
-      std::set<size_t> selected_corpus_records = FirstMoverSelection(reduced_set, env_.mutate_batch_size);
-
-      for (auto index : selected_corpus_records) {
-        const auto &corpus_record = corpus_.Records()[index];
+      for (size_t i = 0; i < env_.mutate_batch_size; i++) {
+        const auto &corpus_record = corpus_.Records()[reduced_vec[i]];
         mutation_inputs.push_back(
-          MutationInputRef{corpus_record.data, &corpus_record.metadata});
+            MutationInputRef{corpus_record.data, &corpus_record.metadata});
       }
     } else {
       for (size_t i = 0; i < env_.mutate_batch_size; i++) {
