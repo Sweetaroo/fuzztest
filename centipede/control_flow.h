@@ -125,6 +125,24 @@ class ControlFlowGraph {
     return reachability_[pc_index].reach;
   }
 
+  void DumpGraph(std::ostream &os = std::cout) const {
+    printf("graph size : %d\n", graph_.size());
+    for (const auto &[pc, successors] : graph_) {
+      os << "Basic block PC: 0x" << std::hex << pc << std::dec << " has successors:\n";
+      for (auto succ : successors) {
+        os << "    → 0x" << std::hex << succ << std::dec << "\n";
+      }
+    }
+  }
+
+  void DumpPcIndexMap(std::ostream &os = std::cout) const {
+    os << "=== PC Index Map Dump ===\n";
+    for (const auto &[pc, index] : pc_index_map_) {
+      os << "PC: 0x" << std::hex << pc
+         << " → Index: " << std::dec << index << "\n";
+    }
+  }
+
  private:
   // Map from PC to the idx in pc_table.
   absl::flat_hash_map<uintptr_t, PCIndex> pc_index_map_;

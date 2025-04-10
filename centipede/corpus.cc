@@ -76,6 +76,22 @@ std::pair<size_t, size_t> Corpus::MaxAndAvgSize() const {
   return {max, total / records_.size()};
 }
 
+
+void Corpus::UpdateFrontierNodeSetForCorpus(const CoverageFrontier &coverage_frontier) {
+  for (auto &record : records_) {
+    record.frontier_node_set.clear();
+    // printf("================================================");
+    for (const auto feature : record.features) {
+      if (!feature_domains::kPCs.Contains(feature)) continue;
+      size_t pc_index = ConvertPCFeatureToPcIndex(feature);
+      // printf("pc_index  %d\n", pc_index);
+      if (pc_index < coverage_frontier.MaxPcIndex() && coverage_frontier.PcIndexIsFrontier(pc_index)) {
+        record.frontier_node_set.insert(pc_index);
+      }
+    }
+  }
+}
+
 size_t Corpus::Prune(const FeatureSet &fs,
                      const CoverageFrontier &coverage_frontier,
                      size_t max_corpus_size, Rng &rng) {
@@ -96,8 +112,7 @@ size_t Corpus::Prune(const FeatureSet &fs,
   // Also remove some random elements, if the corpus is still too big.
   // The corpus must not be empty, hence target_size is at least 1.
   // It should also be <= max_corpus_size.
-  size_t target_size = std::min(
-      max_corpus_size, std::max(1UL, records_.size() - num_zero_weights));
+  size_t target_size = std::max(1UL, records_.size() - num_zero_weights);
   auto subset_to_remove =
       weighted_distribution_.RemoveRandomWeightedSubset(target_size, rng);
   RemoveSubset(subset_to_remove, records_);
@@ -234,6 +249,50 @@ uint64_t WeightedDistribution::PopBack() {
 //------------------------------------------------------------------------------
 //                            CoverageFrontier
 //------------------------------------------------------------------------------
+
+
+void CoverageFrontier::UpdateGlobalFrontierSet(const std::vector<CorpusRecord> &corpus_records) {
+  std::fill(frontier_.begin(), frontier_.end(), false);
+
+  // A vector of covered indices in pc_table. Needed for Coverage object.
+  PCIndexVec covered_pcs;
+  for (const auto &record : corpus_records) {
+    for (auto feature : record.features) {
+      if (!feature_domains::kPCs.Contains(feature)) continue;
+      size_t idx = ConvertPCFeatureToPcIndex(feature);
+      if (idx >= binary_info_.pc_table.size()) continue;
+      covered_pcs.push_back(idx);
+    }
+  }
+
+  Coverage coverage(binary_info_.pc_table, covered_pcs);
+
+  IteratePcTableFunctions(binary_info_.pc_table, [this, &coverage](size_t beg,
+                                                                   size_t end) {
+    auto frontier_begin = frontier_.begin() + beg;
+    auto frontier_end = frontier_.begin() + end;
+
+    // Iterate over BBs in the function and check the coverage statue.
+    for (size_t i = beg; i < end; ++i) {
+      // If the current pc is not covered, it cannot be a frontier.
+      if (!coverage.BlockIsCovered(i)) continue;
+
+      auto pc = binary_info_.pc_table[i].pc;
+      // Current pc is covered, look for a non-covered successor.
+      for (auto successor : binary_info_.control_flow_graph.GetSuccessors(pc)) {
+        // Successor pc may not be in PCTable because of pruning.
+        if (!binary_info_.control_flow_graph.IsInPcTable(successor)) continue;
+
+        auto successor_idx = binary_info_.control_flow_graph.GetPcIndex(successor);
+
+        // This successor is covered, skip it.
+        if (coverage.BlockIsCovered(successor_idx)) continue;
+
+        frontier_[i] = true;
+      }
+    }
+  });
+}
 
 size_t CoverageFrontier::Compute(const Corpus &corpus) {
   return Compute(corpus.Records());

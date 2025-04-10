@@ -116,6 +116,7 @@ Centipede::Centipede(const Environment &env, CentipedeCallbacks &user_callbacks,
       symbols_(binary_info_.symbols),
       function_filter_(env_.function_filter, symbols_),
       coverage_logger_(coverage_logger),
+      global_selected_frontier_(binary_info.pc_table.size(), false),
       stats_(stats),
       input_filter_path_(std::filesystem::path(TemporaryLocalDirPath())
                              .append("filter-input")),
@@ -371,6 +372,7 @@ size_t Centipede::AddPcPairFeatures(FeatureVec &fv) {
   }
   return num_added_pairs;
 }
+
 
 bool Centipede::RunBatch(
     const std::vector<ByteArray> &input_vec,
@@ -688,6 +690,62 @@ void Centipede::ReloadAllShardsAndWriteDistilledCorpus() {
   }
 }
 
+std::set<size_t> Centipede::DynamicSetConstruction() {
+  std::set<size_t> reduced_set;
+  std::vector<bool> covered_frontier_nodes(coverage_frontier_.MaxPcIndex(), false);
+  std::vector<size_t> shuffled_indexs(corpus_.NumActive());
+  std::iota(shuffled_indexs.begin(), shuffled_indexs.end(), 0);
+  std::shuffle(shuffled_indexs.begin(), shuffled_indexs.end(), rng_);
+
+  size_t total_frontier_num = coverage_frontier_.NumFunctionsInFrontier();
+  size_t cur_frontier_num = 0;
+  for (auto index : shuffled_indexs) {
+    auto &record = corpus_.Records()[index];
+    auto &frontier_node_set = record.frontier_node_set;
+    for (auto &frontier_node_idx : frontier_node_set) {
+      if (!covered_frontier_nodes[frontier_node_idx]) {
+        covered_frontier_nodes[frontier_node_idx] = true;
+        ++ cur_frontier_num;
+        reduced_set.insert(index);                                       // use property of std::set
+        if (cur_frontier_num == total_frontier_num) return reduced_set;
+      }
+    }
+  }
+  return reduced_set;
+}
+
+std::set<size_t> Centipede::FirstMoverSelection(const std::set<size_t> &reduced_set, size_t num_seeds) {
+  std::set<size_t> selected_corpus_records;
+  std::set<size_t> tmp_candidate_set;
+  for (auto index : reduced_set) {
+    auto &record = corpus_.Records()[index];
+    auto &frontier_node_set = record.frontier_node_set;
+    for (auto &frontier_node_idx : frontier_node_set) {
+      if (!global_selected_frontier_[frontier_node_idx]) {
+        tmp_candidate_set.insert(index);
+        break;
+      }
+    }
+  }
+
+  const std::set<size_t> &final_candidate_set = tmp_candidate_set.empty() ? reduced_set : tmp_candidate_set;
+  std::vector<size_t> candidate_vec(final_candidate_set.begin(), final_candidate_set.end());
+
+
+  for (size_t i = 0; i < num_seeds; i++) {
+    size_t index = candidate_vec[rng_() % candidate_vec.size()];
+    selected_corpus_records.insert(index);
+    auto &record = corpus_.Records()[index];
+    auto &frontier_node_set = record.frontier_node_set;
+    for (auto &frontier_node_idx : frontier_node_set) {
+      global_selected_frontier_[frontier_node_idx] = true;
+    }
+  }
+
+  return selected_corpus_records;
+}
+
+
 void Centipede::LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
                                absl::Nonnull<BlobFileWriter *> features_file) {
   std::vector<ByteArray> seed_inputs;
@@ -711,6 +769,18 @@ void Centipede::LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
   if (corpus_.NumTotal() == 0) {
     for (const auto &seed_input : seed_inputs)
       corpus_.Add(seed_input, {}, {}, fs_, coverage_frontier_);
+  }
+}
+
+void Centipede::PrintSeedFrontierNodes() {
+  for (size_t i = 0; i < corpus_.Records().size(); ++i) {
+    auto &record = corpus_.Records()[i];
+    auto &frontier_node_set = record.frontier_node_set;
+    printf("corpus record idx : %d\n", i);
+    for (auto &frontier_node_idx : frontier_node_set) {
+      printf("frontier node idx : %d\n", frontier_node_idx);
+    }
+    printf("----------------------------------------\n\n");
   }
 }
 
@@ -769,13 +839,37 @@ void Centipede::FuzzingLoop() {
     auto remaining_runs = env_.num_runs - new_runs;
     auto batch_size = std::min(env_.batch_size, remaining_runs);
     std::vector<MutationInputRef> mutation_inputs;
-    mutation_inputs.reserve(env_.mutate_batch_size);
-    for (size_t i = 0; i < env_.mutate_batch_size; i++) {
-      const auto &corpus_record = env_.use_corpus_weights
-                                      ? corpus_.WeightedRandom(rng_())
-                                      : corpus_.UniformRandom(rng_());
-      mutation_inputs.push_back(
+    mutation_inputs.reserve(env_.mutate_batch_size);              // select  mutate_batch_size seeds
+
+    // update global frontier set
+    coverage_frontier_.UpdateGlobalFrontierSet(corpus_.Records());
+
+    if (batch_index > 0) {
+      // update frontier node set for each corpus record
+      corpus_.UpdateFrontierNodeSetForCorpus(coverage_frontier_);
+
+      // get reduced seed set via Dynamic Set Construction algorithm
+      std::set<size_t> reduced_set = DynamicSetConstruction();
+
+      // PrintSeedFrontierNodes();
+
+      printf("corpus size : %d   reduced set : %d\n", corpus_.NumActive(), reduced_set.size());
+      // select seeds from reduced corpus
+      std::set<size_t> selected_corpus_records = FirstMoverSelection(reduced_set, env_.mutate_batch_size);
+
+      for (auto index : selected_corpus_records) {
+        const auto &corpus_record = corpus_.Records()[index];
+        mutation_inputs.push_back(
           MutationInputRef{corpus_record.data, &corpus_record.metadata});
+      }
+    } else {
+      for (size_t i = 0; i < env_.mutate_batch_size; i++) {
+        const auto &corpus_record = env_.use_corpus_weights
+                                        ? corpus_.WeightedRandom(rng_())
+                                        : corpus_.UniformRandom(rng_());
+        mutation_inputs.push_back(
+            MutationInputRef{corpus_record.data, &corpus_record.metadata});
+      }
     }
 
     const std::vector<ByteArray> mutants =

@@ -330,21 +330,23 @@ std::vector<ByteArray> ByteArrayMutator::MutateMany(
   size_t num_inputs = inputs.size();
   std::vector<ByteArray> mutants;
   mutants.reserve(num_mutants);
-  for (size_t i = 0; i < num_mutants; ++i) {
-    auto mutant = inputs[rng_() % num_inputs].data;
-    if (mutant.size() <= max_len_ &&
-        knobs_.GenerateBool(knob_mutate_or_crossover, rng_())) {
-      // Do crossover only if the mutant is not over the max_len_.
-      // Perform crossover with some other input. It may be the same input.
-      const auto &other_input = inputs[rng_() % num_inputs].data;
-      CrossOver(mutant, other_input);
-    } else {
-      // Perform mutation.
-      Mutate(mutant);
+
+  for (size_t i = 0; i < num_inputs; ++i) {
+    auto mutant = inputs[i].data;
+    for (size_t i = 0; i < num_mutants / num_inputs; ++i) {
+      if (mutant.size() <= max_len_ &&
+          knobs_.GenerateBool(knob_mutate_or_crossover, rng_())) {
+        // Do crossover only if the mutant is not over the max_len_.
+        // Perform crossover with some other input. It may be the same input.
+        const auto &other_input = inputs[rng_() % num_inputs].data;
+        CrossOver(mutant, other_input);
+      } else {
+        // Perform mutation.
+        Mutate(mutant);
+      }
+      mutants.push_back(std::move(mutant));
     }
-    mutants.push_back(std::move(mutant));
   }
   return mutants;
 }
-
 }  // namespace centipede

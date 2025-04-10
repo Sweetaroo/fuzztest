@@ -167,6 +167,15 @@ class Centipede {
   // See more comments in centipede.cc.
   size_t AddPcPairFeatures(FeatureVec &fv);
 
+  // reduce corpus set via setcover algorithm
+  std::set<size_t> DynamicSetConstruction();
+
+  // first mover selection, return selected corpus records
+  std::set<size_t> FirstMoverSelection(const std::set<size_t> &reduced_set, size_t mutate_batch_size);
+
+
+  void PrintSeedFrontierNodes();
+
   const Environment &env_;
   const WorkDir wd_{env_};
 
@@ -180,6 +189,7 @@ class Centipede {
   FeatureSet fs_;
   Corpus corpus_;
   CoverageFrontier coverage_frontier_;
+  std::vector<bool> global_selected_frontier_;    // Global frontier node selection status
   size_t num_runs_ = 0;  // counts executed inputs
 
   // Binary-related data, initialized at startup, once per process,

@@ -88,6 +88,7 @@ struct CorpusRecord {
   ByteArray data;
   FeatureVec features;
   ExecutionMetadata metadata;
+  std::set<size_t> frontier_node_set;     // frontier node idx for each seed
 };
 
 // Maintains the corpus of inputs.
@@ -148,6 +149,10 @@ class Corpus {
   // Returns a string used for logging the corpus memory usage.
   std::string MemoryUsageString() const;
 
+  // update frontier node set for each corpus record
+  void UpdateFrontierNodeSetForCorpus(const CoverageFrontier &);
+
+
  private:
   std::vector<CorpusRecord> records_;
   // Maintains weights for elements of records_.
@@ -193,6 +198,12 @@ class CoverageFrontier {
     return frontier_weight_[idx];
   }
 
+  size_t NumGlobalFrontierNodes() const {
+    return std::count(frontier_.begin(), frontier_.end(), true);
+  }
+
+  void UpdateGlobalFrontierSet(const std::vector<CorpusRecord> &);
+
  private:
   const BinaryInfo &binary_info_;
 
@@ -203,6 +214,7 @@ class CoverageFrontier {
 
   // The number of functions in the frontier.
   size_t num_functions_in_frontier_ = 0;
+
 };
 
 }  // namespace centipede

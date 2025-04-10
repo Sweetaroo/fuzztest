@@ -15,8 +15,8 @@
 common --enable_platform_specific_config
 
 # Force the use of Clang for all builds.
-build --action_env=CC=clang
-build --action_env=CXX=clang++
+build --action_env=CC=clang-18
+build --action_env=CXX=clang++-18
 
 # Use the C++17 standard.
 build --cxxopt=-std=c++17
