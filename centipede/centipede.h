@@ -171,7 +171,7 @@ class Centipede {
   std::set<size_t> DynamicSetConstruction();
 
   // first mover selection, return selected corpus records
-  std::set<size_t> FirstMoverSelection(const std::set<size_t> &reduced_set, size_t mutate_batch_size);
+  std::set<size_t> FirstMoverSelectionWithRR(const std::set<size_t> &reduced_set, size_t mutate_batch_size);
 
 
   void PrintSeedFrontierNodes();

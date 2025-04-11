@@ -714,9 +714,10 @@ std::set<size_t> Centipede::DynamicSetConstruction() {
   return reduced_set;
 }
 
-std::set<size_t> Centipede::FirstMoverSelection(const std::set<size_t> &reduced_set, size_t num_seeds) {
+std::set<size_t> Centipede::FirstMoverSelectionWithRR(const std::set<size_t> &reduced_set, size_t num_seeds) {
   std::set<size_t> selected_corpus_records;
   std::set<size_t> tmp_candidate_set;
+
   for (auto index : reduced_set) {
     auto &record = corpus_.Records()[index];
     auto &frontier_node_set = record.frontier_node_set;
@@ -728,9 +729,13 @@ std::set<size_t> Centipede::FirstMoverSelection(const std::set<size_t> &reduced_
     }
   }
 
+  bool rr_flag = tmp_candidate_set.empty() ? true : false;
+
   const std::set<size_t> &final_candidate_set = tmp_candidate_set.empty() ? reduced_set : tmp_candidate_set;
   std::vector<size_t> candidate_vec(final_candidate_set.begin(), final_candidate_set.end());
 
+  // Use RR, reset the global_selected_frontier_ if the candidate set is empty.
+  if (rr_flag) std::fill(global_selected_frontier_.begin(), global_selected_frontier_.end(), false);
 
   for (size_t i = 0; i < num_seeds; i++) {
     size_t index = candidate_vec[rng_() % candidate_vec.size()];
@@ -855,7 +860,7 @@ void Centipede::FuzzingLoop() {
 
       printf("corpus size : %d   reduced set : %d\n", corpus_.NumActive(), reduced_set.size());
       // select seeds from reduced corpus
-      std::set<size_t> selected_corpus_records = FirstMoverSelection(reduced_set, env_.mutate_batch_size);
+      std::set<size_t> selected_corpus_records = FirstMoverSelectionWithRR(reduced_set, env_.mutate_batch_size);
 
       for (auto index : selected_corpus_records) {
         const auto &corpus_record = corpus_.Records()[index];
