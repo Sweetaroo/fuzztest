@@ -695,7 +695,7 @@ std::set<size_t> Centipede::GreedySetConstruction() {
   auto frontier_status = coverage_frontier_.GetGlobalFrontierVec();
   std::vector<bool> seed_status(corpus_.NumActive(), false);
 
-  size_t total_frontier_num = coverage_frontier_.NumFunctionsInFrontier();
+  size_t total_frontier_num = coverage_frontier_.NumGlobalFrontierNodes();
   size_t covered_frontier_num = 0;
   while (covered_frontier_num < total_frontier_num) {
     // count coverd frontier nodes in the remaining global frontier node set for each seed
@@ -735,7 +735,7 @@ std::set<size_t> Centipede::DynamicSetConstruction() {
   std::iota(shuffled_indexs.begin(), shuffled_indexs.end(), 0);
   std::shuffle(shuffled_indexs.begin(), shuffled_indexs.end(), rng_);
 
-  size_t total_frontier_num = coverage_frontier_.NumFunctionsInFrontier();
+  size_t total_frontier_num = coverage_frontier_.NumGlobalFrontierNodes();
   size_t cur_frontier_num = 0;
   for (auto index : shuffled_indexs) {
     auto &record = corpus_.Records()[index];

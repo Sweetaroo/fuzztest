@@ -262,15 +262,24 @@ void CoverageFrontier::UpdateGlobalFrontierSet(const std::vector<CorpusRecord> &
       size_t idx = ConvertPCFeatureToPcIndex(feature);
       if (idx >= binary_info_.pc_table.size()) continue;
       covered_pcs.push_back(idx);
+      frontier_[idx] = true;
     }
   }
 
   Coverage coverage(binary_info_.pc_table, covered_pcs);
 
+  num_functions_in_frontier_ = 0;
   IteratePcTableFunctions(binary_info_.pc_table, [this, &coverage](size_t beg,
                                                                    size_t end) {
     auto frontier_begin = frontier_.begin() + beg;
     auto frontier_end = frontier_.begin() + end;
+    size_t cov_size_in_this_func = std::count(frontier_begin, frontier_end, true);
+
+    if (cov_size_in_this_func > 0 && cov_size_in_this_func < end - beg)
+    ++num_functions_in_frontier_;
+
+    // Reset the frontier_ entries.
+    std::fill(frontier_begin, frontier_end, false);
 
     // Iterate over BBs in the function and check the coverage statue.
     for (size_t i = beg; i < end; ++i) {
@@ -278,6 +287,7 @@ void CoverageFrontier::UpdateGlobalFrontierSet(const std::vector<CorpusRecord> &
       if (!coverage.BlockIsCovered(i)) continue;
 
       auto pc = binary_info_.pc_table[i].pc;
+
       // Current pc is covered, look for a non-covered successor.
       for (auto successor : binary_info_.control_flow_graph.GetSuccessors(pc)) {
         // Successor pc may not be in PCTable because of pruning.
