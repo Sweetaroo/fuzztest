@@ -697,7 +697,7 @@ std::set<size_t> Centipede::DynamicSetConstruction() {
   std::iota(shuffled_indexs.begin(), shuffled_indexs.end(), 0);
   std::shuffle(shuffled_indexs.begin(), shuffled_indexs.end(), rng_);
 
-  size_t total_frontier_num = coverage_frontier_.NumFunctionsInFrontier();
+  size_t total_frontier_num = coverage_frontier_.NumGlobalFrontierNodes();
   size_t cur_frontier_num = 0;
   for (auto index : shuffled_indexs) {
     auto &record = corpus_.Records()[index];
